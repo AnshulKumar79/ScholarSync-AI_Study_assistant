@@ -3,6 +3,7 @@ uvicorn
 langchain
 langchain-google-genai
 langchain-huggingface
+langchain-community
 pypdf
 faiss-cpu
 python-dotenv
