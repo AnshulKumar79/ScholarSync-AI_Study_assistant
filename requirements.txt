@@ -7,3 +7,7 @@ langchain-community
 pypdf
 faiss-cpu
 python-dotenv
+python-multipart
+sentence-transformers
+streamlit
+requests
