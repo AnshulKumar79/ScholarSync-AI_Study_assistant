@@ -5,6 +5,9 @@ from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
 from rag_utils import process_and_store_pdf, get_context_from_db
 from pydantic import BaseModel
+from prompts import get_rag_prompt
+from utils.doc_processor import process_pdf_to_chunks
+from utils.DB_handler import create_and_store_db, get_context_from_db
 
 class QuestionRequest(BaseModel):
     question: str
@@ -41,24 +44,27 @@ async def test_ai():
 @app.post("/upload")
 async def upload_document(file: UploadFile = File(...)):
     try:
-        # 1. Uploaded file ko temporarily save karna
+        #Uploaded file ko temporarily save karna
         temp_file_path = f"temp_{file.filename}"
         with open(temp_file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
 
-        # 2. PDF ko process aur FAISS mein store karna
-        num_chunks = process_and_store_pdf(temp_file_path)
+        #PDF ko process karna aur chunks create karna
+        num_chunks = process_pdf_to_chunks(temp_file_path)
+        if not chunks:
+            return {"status": "error", "message": "Failed to read PDF."}
 
-        # 3. Temporary file ko delete kar dena (Clean up)
-        os.remove(temp_file_path)
+        #Chunks ko database mein store karna
+        success = create_and_store_db(chunks)
+        if not success:
+            return {"status": "error", "message": "Failed to save to database."}
 
-        return {
-            "status": "success",
-            "message": f"File '{file.filename}' processed successfully.",
-            "chunks_created": num_chunks
-        }
-    except Exception as e:
-        return {"status": "error", "message": str(e)}
+        return {"status": "success", "chunks_created": len(chunks)}
+    
+    finally:
+        #Temp file delete karna (finally block ensures ye humesha delete ho)
+        if os.path.exists(temp_file_path):
+            os.remove(temp_file_path)
 
 
 
@@ -71,18 +77,8 @@ async def ask_question(req: QuestionRequest):
         if "ERROR" in context:
             return {"status": "error", "message": "Please upload a PDF first before asking questions."}
 
-        #AI ke liye ek strict Prompt banana
-        prompt = f"""You are an intelligent study assistant named ScholarSync. 
-        Please answer the user's question based ONLY on the provided Context. 
-        If the answer is not available in the context, clearly state: "I'm sorry, but the answer is not present in the uploaded document." Do not guess the answer.
 
-        Context:
-        {context}
-
-        Question:
-        {req.question}
-
-        Answer:"""
+        prompt = get_rag_prompt(context, req.question)
 
         #Gemini ko prompt bhej kar answer lena
         response = llm.invoke(prompt)
