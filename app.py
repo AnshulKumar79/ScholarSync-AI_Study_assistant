@@ -1,5 +1,6 @@
 import streamlit as st
 import requests
+import base64
 
 #Backend API URL
 API_URL = "http://127.0.0.1:8000"
@@ -44,31 +45,50 @@ with st.sidebar:
         st.session_state.messages = []
         st.rerun()
 
-# --- MAIN CHAT INTERFACE ---
-# Main Chat UI
-st.title("🎓 ScholarSync AI")
-st.markdown("Chat with your documents with full context memory!")
 
+#Main Chat UI
+st.title("🎓 ScholarSync AI")
+st.markdown("Chat with your docs and images!")
+
+# Purane messages dikhana
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
+        # Agar purane message mein image thi, toh wo bhi dikhayein
+        if "image_b64" in message and message["image_b64"]:
+            st.image(base64.b64decode(message["image_b64"]), width=300)
 
-if prompt := st.chat_input("Ask a follow-up question..."):
-    # Show user message
-    st.session_state.messages.append({"role": "user", "content": prompt})
+#Layout for Image Uploader and Chat Input
+col1, col2 = st.columns([1, 3])
+with col1:
+    img_upload = st.file_uploader("🖼️ Attach Image", type=["png", "jpg", "jpeg"], label_visibility="collapsed")
+
+prompt = st.chat_input("Ask a follow-up question...")
+
+if prompt:
+    #Image ko Base64 mein convert karna (agar upload hui hai)
+    image_b64 = None
+    if img_upload:
+        image_b64 = base64.b64encode(img_upload.getvalue()).decode("utf-8")
+
+    #User ka message UI par dikhana
+    st.session_state.messages.append({"role": "user", "content": prompt, "image_b64": image_b64})
     with st.chat_message("user"):
         st.markdown(prompt)
+        if image_b64:
+            st.image(img_upload, width=300)
 
-    # API Request with HISTORY
+    #API Request bhejna
     with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
+        with st.spinner("Analyzing text and image..."):
             try:
-                # Hum pichle messages bhej rahe hain (current prompt ko chhod kar)
+                #Sirf purane messages history mein bhejenge
                 chat_history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages[:-1]]
                 
                 payload = {
                     "question": prompt,
-                    "history": chat_history
+                    "history": chat_history,
+                    "image_base64": image_b64
                 }
                 
                 res = requests.post(f"{API_URL}/ask", json=payload)
@@ -77,6 +97,6 @@ if prompt := st.chat_input("Ask a follow-up question..."):
                     st.markdown(answer)
                     st.session_state.messages.append({"role": "assistant", "content": answer})
                 else:
-                    st.error("Error fetching answer.")
+                    st.error(f"Error fetching answer: {res.text}")
             except Exception as e:
-                st.error(f"Backend connection failed: {e}")
+                st.error(f"Connection failed: {e}")
