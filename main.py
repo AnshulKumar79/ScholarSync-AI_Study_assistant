@@ -3,14 +3,15 @@ import shutil
 from fastapi import FastAPI, UploadFile, File
 from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
-from rag_utils import process_and_store_pdf, get_context_from_db
 from pydantic import BaseModel
 from prompts import get_rag_prompt
 from utils.doc_processor import process_pdf_to_chunks
 from utils.DB_handler import create_and_store_db, get_context_from_db
+from typing import List, Dict
 
 class QuestionRequest(BaseModel):
     question: str
+    history: List[Dict[str, str]] = []
 
 #loading secret keys from .env file
 load_dotenv()
@@ -51,15 +52,15 @@ async def upload_document(file: UploadFile = File(...)):
 
         #PDF ko process karna aur chunks create karna
         num_chunks = process_pdf_to_chunks(temp_file_path)
-        if not chunks:
+        if not num_chunks:
             return {"status": "error", "message": "Failed to read PDF."}
 
         #Chunks ko database mein store karna
-        success = create_and_store_db(chunks)
+        success = create_and_store_db(num_chunks)
         if not success:
             return {"status": "error", "message": "Failed to save to database."}
 
-        return {"status": "success", "chunks_created": len(chunks)}
+        return {"status": "success", "chunks_created": len(num_chunks)}
     
     finally:
         #Temp file delete karna (finally block ensures ye humesha delete ho)
@@ -78,7 +79,7 @@ async def ask_question(req: QuestionRequest):
             return {"status": "error", "message": "Please upload a PDF first before asking questions."}
 
 
-        prompt = get_rag_prompt(context, req.question)
+        prompt = get_rag_prompt(context, req.question, req.history)
 
         #Gemini ko prompt bhej kar answer lena
         response = llm.invoke(prompt)
