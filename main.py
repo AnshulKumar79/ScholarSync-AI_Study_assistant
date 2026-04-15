@@ -7,11 +7,12 @@ from pydantic import BaseModel
 from prompts import get_rag_prompt
 from utils.doc_processor import process_pdf_to_chunks
 from utils.DB_handler import create_and_store_db, get_context_from_db
-from typing import List, Dict
+from typing import List, Dict, Optional
 
 class QuestionRequest(BaseModel):
     question: str
     history: List[Dict[str, str]] = []
+    image_base64: Optional[str] = None
 
 #loading secret keys from .env file
 load_dotenv()
@@ -21,7 +22,7 @@ app = FastAPI(title="ScholarSync API", description="Backend for RAG Study Assist
 
 #Gemini LLM setup karna
 llm = ChatGoogleGenerativeAI(
-    model="gemini-2.5-flash",
+    model="gemini-2.5-flash-lite",
     google_api_key=os.getenv("GEMINI_API_KEY")
 )
 
@@ -68,25 +69,20 @@ async def upload_document(file: UploadFile = File(...)):
             os.remove(temp_file_path)
 
 
-
 @app.post("/ask")
 async def ask_question(req: QuestionRequest):
     try:
-        #Database se relevant context nikalna
-        context = get_context_from_db(req.question)
+        #Context sirf tab nikalenge jab PDF upload hui ho, warna blank string
+        context = get_context_from_db(req.question) if get_context_from_db(req.question) != "ERROR: Database not found." else "No PDF context provided."
         
-        if "ERROR" in context:
-            return {"status": "error", "message": "Please upload a PDF first before asking questions."}
+        #Ab prompt function ko image bhi bhejenge
+        prompt_messages = get_rag_prompt(context, req.question, req.history, req.image_base64)
 
-
-        prompt = get_rag_prompt(context, req.question, req.history)
-
-        #Gemini ko prompt bhej kar answer lena
-        response = llm.invoke(prompt)
+        
+        response = llm.invoke(prompt_messages)
 
         return {
             "status": "success",
-            "question": req.question,
             "answer": response.content
         }
     except Exception as e:
