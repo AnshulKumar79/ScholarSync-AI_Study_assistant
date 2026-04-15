@@ -1,7 +1,7 @@
 import streamlit as st
 import requests
 
-# Backend API URL
+#Backend API URL
 API_URL = "http://127.0.0.1:8000"
 
 st.set_page_config(page_title="ScholarSync-AI Assistant", page_icon="🎓", layout="wide")
@@ -9,9 +9,9 @@ st.set_page_config(page_title="ScholarSync-AI Assistant", page_icon="🎓", layo
 #Custom CSS for better look
 st.markdown("""
     <style>
-    .main { background-color: #f5f7f9; }
-    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #4A90E2; color: white; }
-    .stTextInput>div>div>input { border-radius: 5px; }
+    /* Better styling for chat messages */
+    .stChatMessage { border-radius: 10px; padding: 10px; margin-bottom: 10px; }
+    .stSidebar { background-color: #f8f9fa; }
     </style>
     """, unsafe_allow_html=True)
 
@@ -21,55 +21,62 @@ if "messages" not in st.session_state:
 
 # --- SIDEBAR: Upload Logic ---
 with st.sidebar:
-    st.title("📂 Document Center")
-    uploaded_file = st.file_uploader("Upload your Study Material (PDF)", type=["pdf"])
+    st.image("https://cdn-icons-png.flaticon.com/512/3135/3135810.png", width=50) # Optional Logo
+    st.title("ScholarSync Setup")
     
-    if st.button("Process"):
+    st.markdown("### 1. Document Upload 📄")
+    uploaded_file = st.file_uploader("Upload your PDF", type=["pdf"], label_visibility="collapsed")
+    
+    if st.button("🚀 Process Document", use_container_width=True):
         if uploaded_file:
-            with st.spinner("Analyzing PDF and creating Vector DB..."):
+            with st.spinner("Indexing into Vector DB..."):
                 files = {"file": (uploaded_file.name, uploaded_file.getvalue(), "application/pdf")}
-                try:
-                    res = requests.post(f"{API_URL}/upload", files=files)
-                    if res.status_code == 200:
-                        st.success(f"Success! Processed {res.json()['chunks_created']} chunks.")
-                    else:
-                        st.error("Backend error. Check terminal.")
-                except Exception as e:
-                    st.error(f"Connection failed: {e}")
+                res = requests.post(f"{API_URL}/upload", files=files)
+                if res.status_code == 200:
+                    st.success("Database Ready!")
+                else:
+                    st.error("Error processing document.")
         else:
-            st.warning("Please select a file first.")
+            st.warning("Upload a PDF first.")
     
     st.divider()
-    if st.button("🗑️ Clear Chat"):
+    if st.button("🗑️ Clear Conversation", type="secondary", use_container_width=True):
         st.session_state.messages = []
         st.rerun()
 
 # --- MAIN CHAT INTERFACE ---
-st.title("💬 Chat with your assistant")
-st.caption("Ask anything from your uploaded document — ScholarSync will find the answer.")
+# Main Chat UI
+st.title("🎓 ScholarSync AI")
+st.markdown("Chat with your documents with full context memory!")
 
-#Purane messages display karna
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-#User Input
-if prompt := st.chat_input("What would you like to know?"):
-    #User message show karein
+if prompt := st.chat_input("Ask a follow-up question..."):
+    # Show user message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    #Backend se answer mangwayein
+    # API Request with HISTORY
     with st.chat_message("assistant"):
-        with st.spinner("Searching document..."):
+        with st.spinner("Thinking..."):
             try:
-                res = requests.post(f"{API_URL}/ask", json={"question": prompt})
+                # Hum pichle messages bhej rahe hain (current prompt ko chhod kar)
+                chat_history = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages[:-1]]
+                
+                payload = {
+                    "question": prompt,
+                    "history": chat_history
+                }
+                
+                res = requests.post(f"{API_URL}/ask", json=payload)
                 if res.status_code == 200:
                     answer = res.json()["answer"]
                     st.markdown(answer)
                     st.session_state.messages.append({"role": "assistant", "content": answer})
                 else:
-                    st.error("Backend error occurred.")
+                    st.error("Error fetching answer.")
             except Exception as e:
-                st.error(f"Could not reach backend: {e}")
+                st.error(f"Backend connection failed: {e}")
