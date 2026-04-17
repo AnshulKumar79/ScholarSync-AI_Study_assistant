@@ -2,6 +2,7 @@
 
 ScholarSync is an intelligent study companion designed to bridge the gap between static documents and interactive learning. Built on a **Multimodal RAG (Retrieval-Augmented Generation)** architecture, it allows users to chat with their PDFs/img and analyze visual data (diagrams, math problems, handwritten notes) using LLM models.
 
+**TRY IT YOURSELF**[https://anshulkumar24-scholarsync.hf.space/]
 ---
 
 ## Key Features
